@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/vliw-asm",
+    "crates/vliw-backend",
+    "crates/vliwc",
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/gboyer/VliwCompiler"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+# inkwell is the safe Rust binding to LLVM. The feature must match the
+# installed LLVM development libraries. Use dynamic linking so distro LLVM
+# installs that omit static archives like libPolly still build cleanly.
+inkwell = { version = "0.9", features = ["llvm19-1-force-dynamic"] }

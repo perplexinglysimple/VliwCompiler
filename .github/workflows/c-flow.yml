@@ -1,0 +1,59 @@
+name: C flow scaffold
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  c-to-vliw-flow:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out compiler
+        uses: actions/checkout@v4
+
+      - name: Install LLVM 19 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 llvm-19-dev
+
+      - name: Export LLVM 19 toolchain
+        run: |
+          echo "/usr/lib/llvm-19/bin" >> "$GITHUB_PATH"
+          echo "LLVM_SYS_191_PREFIX=/usr/lib/llvm-19" >> "$GITHUB_ENV"
+          echo "LLVM_CONFIG_PATH=/usr/lib/llvm-19/bin/llvm-config" >> "$GITHUB_ENV"
+          /usr/lib/llvm-19/bin/llvm-config --version
+
+      - name: Build Rust workspace
+        run: cargo build --workspace
+
+      - name: Test Rust workspace
+        run: cargo test --workspace
+
+      - name: Lower sample C to LLVM IR
+        run: |
+          mkdir -p build/c-flow
+          clang-19 -S -emit-llvm -O1 -ffreestanding -fno-builtin \
+            examples/simple.c \
+            -o build/c-flow/simple.ll
+
+      - name: Attempt scalar VLIW lowering
+        id: vliwc
+        continue-on-error: true
+        run: |
+          cargo run -p vliwc -- build/c-flow/simple.ll -o build/c-flow/simple.vliw
+
+      - name: Record expected backend gap
+        if: steps.vliwc.outcome == 'failure'
+        run: |
+          echo "LLVM IR -> VLIW codegen is not implemented yet."
+          echo "The flow is wired; remove continue-on-error when scalar lowering lands."
+
+      - name: Verify emitted VLIW when codegen starts working
+        if: steps.vliwc.outcome == 'success'
+        run: |
+          git clone --depth 1 https://github.com/perplexinglysimple/LwirSimulator.git ../LwirSimulator
+          cargo build --manifest-path ../LwirSimulator/Cargo.toml --bin vliw_verify --bin vliw_simulator
+          ../LwirSimulator/target/debug/vliw_verify build/c-flow/simple.vliw
+          ../LwirSimulator/target/debug/vliw_simulator --trace build/c-flow/simple.vliw

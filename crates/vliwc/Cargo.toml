@@ -1,0 +1,17 @@
+[package]
+name = "vliwc"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "VLIW compiler driver."
+
+[[bin]]
+name = "vliwc"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+vliw-backend = { path = "../vliw-backend" }
+vliw-asm = { path = "../vliw-asm" }

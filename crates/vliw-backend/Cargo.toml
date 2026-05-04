@@ -1,0 +1,13 @@
+[package]
+name = "vliw-backend"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "LLVM IR -> VLIW lowering, scheduling, and bundle packing."
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+vliw-asm = { path = "../vliw-asm" }
+inkwell = { workspace = true }

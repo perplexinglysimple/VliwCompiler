@@ -1,0 +1,7 @@
+target/
+build/
+Cargo.lock.bak
+.vscode/
+.idea/
+*.swp
+.DS_Store
