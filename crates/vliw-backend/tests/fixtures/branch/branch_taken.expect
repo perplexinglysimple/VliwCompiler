@@ -1,0 +1,3 @@
+# branch_taken: condition (1 < 2) is always true
+# the true branch is taken → return value 42 lands in r1
+r1 = 42

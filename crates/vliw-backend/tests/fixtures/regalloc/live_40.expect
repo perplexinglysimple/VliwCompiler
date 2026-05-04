@@ -1,0 +1,5 @@
+# More live values than allocatable GPRs; spill/reload must preserve values.
+# The simulator starts argument registers at zero, so the chain stores 1.
+mem[0x100:4] = 1
+mem[0x198:4] = 1
+r1 = 0

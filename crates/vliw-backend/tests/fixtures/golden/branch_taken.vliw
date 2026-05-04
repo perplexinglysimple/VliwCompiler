@@ -1,0 +1,133 @@
+.processor {
+  width 4
+
+  hardware {
+    unit alu = integer_alu
+    unit mem = memory
+    unit ctrl = control
+    unit mul = multiplier
+  }
+
+  layout slots {
+    alias I0 = 0
+    alias I1 = 1
+    alias M = 2
+    alias X = 3
+
+    0 = { alu }
+    1 = { alu }
+    2 = { mem }
+    3 = { ctrl, mul }
+  }
+
+  cache { }
+  topology { cpus 1 }
+}
+
+main:
+entry:
+{
+  I0: movi r2, 1
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : stw [r0 + 0x100], r2
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : ldw r2, [r0 + 0x100]
+  X : nop
+}
+{
+  I0: movi r3, 0
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: cmplt p2, r3, r2
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : br p2, if.then
+}
+if.else:
+{
+  I0: movi r2, 0
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : stw [r0 + 0x400], r2
+  X : nop
+}
+{
+  I0: movi r2, 0
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : jmp common.ret
+}
+if.then:
+{
+  I0: movi r3, 42
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : stw [r0 + 0x200], r3
+  X : nop
+}
+{
+  I0: movi r2, 42
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : jmp common.ret
+}
+common.ret:
+{
+  I0: mov r1, r2
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : ret
+}

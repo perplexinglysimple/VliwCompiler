@@ -1,0 +1,5 @@
+fn add_two:
+entry:
+  add v2, v0, v1
+  mov r1, v2
+  ret

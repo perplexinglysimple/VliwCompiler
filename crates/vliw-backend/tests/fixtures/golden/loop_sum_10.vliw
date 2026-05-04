@@ -1,0 +1,115 @@
+.processor {
+  width 4
+
+  hardware {
+    unit alu = integer_alu
+    unit mem = memory
+    unit ctrl = control
+    unit mul = multiplier
+  }
+
+  layout slots {
+    alias I0 = 0
+    alias I1 = 1
+    alias M = 2
+    alias X = 3
+
+    0 = { alu }
+    1 = { alu }
+    2 = { mem }
+    3 = { ctrl, mul }
+  }
+
+  cache { }
+  topology { cpus 1 }
+}
+
+sum_to_10:
+entry:
+{
+  I0: movi r2, 0
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: movi r3, 0
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : jmp loop
+}
+loop:
+{
+  I0: movi r4, 10
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: cmplt p4, r2, r4
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : br p4, body
+}
+exit:
+{
+  I0: mov r1, r3
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : ret
+}
+body:
+{
+  I0: add r4, r3, r2
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: movi r5, 1
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: add r5, r2, r5
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: mov r2, r5
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: mov r3, r4
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : jmp loop
+}

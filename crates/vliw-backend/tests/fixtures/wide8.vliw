@@ -1,0 +1,33 @@
+.processor {
+  width 8
+
+  hardware {
+    unit alu = integer_alu
+    unit mem = memory
+    unit ctrl = control
+    unit mul = multiplier
+  }
+
+  layout slots {
+    alias I0 = 0
+    alias I1 = 1
+    alias I2 = 2
+    alias I3 = 3
+    alias M0 = 4
+    alias M1 = 5
+    alias X = 6
+    alias I4 = 7
+
+    0 = { alu }
+    1 = { alu }
+    2 = { alu }
+    3 = { alu }
+    4 = { mem }
+    5 = { mem }
+    6 = { ctrl, mul }
+    7 = { alu }
+  }
+
+  cache { }
+  topology { cpus 1 }
+}

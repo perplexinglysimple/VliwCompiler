@@ -1,0 +1,3 @@
+# branch_not_taken: condition (2 < 1) is always false
+# the false branch is taken → return value 0 lands in r1
+r1 = 0

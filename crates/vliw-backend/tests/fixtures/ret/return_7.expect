@@ -1,0 +1,3 @@
+# int main() { return 7; }
+# return value lands in r1 (RETVAL_REG)
+r1 = 7

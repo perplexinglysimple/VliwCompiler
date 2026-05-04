@@ -1,0 +1,4 @@
+# 3 * 5 = 15 stored to mem[0x100]
+# the mul→stw data dependence requires 3-cycle latency padding;
+# without it vliw_verify would reject the program
+mem[0x100] = 15

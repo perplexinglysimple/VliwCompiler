@@ -1,0 +1,7 @@
+fn demo:
+entry:
+  movi v0, 6
+  movi v1, 7
+  mul v2, v0, v1
+  std, 256, v2
+  ret

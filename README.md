@@ -7,7 +7,15 @@ scheduled `.vliw` assembly that satisfies the simulator's compiler contract.
 
 ## Status
 
-Scaffolding only. No code generation yet.
+The compiler has a working scalar baseline and an optional packed schedule.
+It parses LLVM IR with `inkwell`, lowers the supported integer subset to MIR,
+allocates physical registers, emits scheduled `.vliw` bundle text, and checks
+the generated program with the Rust-side VLIW verifier before writing output.
+
+Supported lowering currently includes integer ALU ops, multiply, integer
+comparisons, conditional and unconditional branches, returns, `i8`/`i32`/`i64`
+loads and stores, constant-offset GEPs, phi lowering for loops, and direct
+calls to functions defined in the same LLVM module.
 
 ## Why Rust + LLVM-as-a-library (not an LLVM out-of-tree backend)
 
@@ -49,12 +57,14 @@ VliwCompiler/
 ├── Cargo.toml              # workspace
 ├── crates/
 │   ├── vliw-asm/           # .vliw text emitter (no LLVM dep)
-│   ├── vliw-backend/       # IR -> VLIW lowering (will pull in inkwell)
+│   ├── vliw-backend/       # IR -> VLIW lowering, scheduling, packing
 │   └── vliwc/              # driver binary
 ├── docs/
 │   ├── dev_plan.md         # staged bring-up plan
-│   └── architecture.md     # design notes — to be filled in
-└── tests/                  # integration tests (later)
+│   ├── dev_tasks.md        # implementation backlog
+│   ├── architecture.md     # current architecture notes
+│   └── mir.md              # MIR design note
+└── tests/                  # simulator-backed integration harness
 ```
 
 ## Build
@@ -73,25 +83,21 @@ cargo run -p vliwc -- --help
 
 The asm emitter targets the format parsed by
 [LwirSimulator](https://github.com/perplexinglysimple/LwirSimulator). To verify
-the emitter before LLVM lowering exists, build the simulator's verifier
-alongside this repo and run the hard-coded demo program:
+the hard-coded demo program, build the simulator's verifier alongside this repo:
 
 ```bash
 mkdir -p build
-cargo run -p vliwc -- --demo -o build/demo.vliw
+cargo run -p vliwc -- --emit=demo -o build/demo.vliw
 ../LwirSimulator/target/debug/vliw_verify build/demo.vliw
 ../LwirSimulator/target/debug/vliw_simulator --trace build/demo.vliw
 ```
 
-## Planned C Flow
+## C Flow
 
-The first compiler smoke test is a deliberately small C program:
-[`examples/simple.c`](examples/simple.c). It writes `42` to simulator memory at
-`0x100` and returns. That should eventually lower through the scalar baseline:
+[`examples/simple.c`](examples/simple.c) writes `42` to simulator memory at
+`0x100` and returns. It lowers through the scalar baseline by default:
 one real syllable per bundle, all other slots `nop`, plus full-`nop` latency
 padding when needed.
-
-The intended end-to-end flow is:
 
 ```bash
 mkdir -p build/c-flow
@@ -106,7 +112,30 @@ cargo run -p vliwc -- build/c-flow/simple.ll -o build/c-flow/simple.vliw
 ../LwirSimulator/target/debug/vliw_simulator --trace build/c-flow/simple.vliw
 ```
 
-Current expected status: the `vliwc` command fails with
-`not implemented: LLVM IR -> VLIW codegen`. The command sequence and CI are
-there to show the shape of the flow; once scalar lowering lands, remove the
-temporary `continue-on-error` from `.github/workflows/c-flow.yml`.
+Use `--schedule=pack` to enable local scheduling plus greedy bundle packing:
+
+```bash
+cargo run -p vliwc -- --schedule=pack build/c-flow/simple.ll -o build/c-flow/simple.pack.vliw
+```
+
+## Processor Layouts
+
+By default, `vliwc` targets the canonical four-slot processor layout from
+`Processor::default()`. The compiler can also take a different processor
+layout and emit `.vliw` output with that layout's header, aliases, width, and
+slot capabilities:
+
+```bash
+cargo run -p vliwc -- \
+  --processor crates/vliw-backend/tests/fixtures/wide8.vliw \
+  --schedule=pack \
+  build/c-flow/simple.ll \
+  -o build/c-flow/simple.wide8.vliw
+```
+
+The `--processor` file is any `.vliw` text containing a `.processor { ... }`
+block. The parser reads that block into `vliw_asm::Processor`; the backend then
+uses the declared slot/unit capabilities when placing scalar syllables and when
+packing bundles. This is covered by `layout_test.rs`, including a contrived
+8-slot target where `pack` emits denser bundles than the canonical 4-slot
+layout.

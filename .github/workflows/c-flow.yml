@@ -25,11 +25,19 @@ jobs:
           echo "LLVM_CONFIG_PATH=/usr/lib/llvm-19/bin/llvm-config" >> "$GITHUB_ENV"
           /usr/lib/llvm-19/bin/llvm-config --version
 
+      - name: Clone and build LwirSimulator
+        run: |
+          git clone --depth 1 https://github.com/perplexinglysimple/LwirSimulator.git ../LwirSimulator
+          cargo build --manifest-path ../LwirSimulator/Cargo.toml --bin vliw_verify --bin vliw_simulator
+          SIM_DIR="$(realpath ../LwirSimulator)"
+          echo "VLIW_VERIFY_BIN=${SIM_DIR}/target/debug/vliw_verify" >> "$GITHUB_ENV"
+          echo "VLIW_SIMULATOR_BIN=${SIM_DIR}/target/debug/vliw_simulator" >> "$GITHUB_ENV"
+
       - name: Build Rust workspace
         run: cargo build --workspace
 
       - name: Test Rust workspace
-        run: cargo test --workspace
+        run: cargo test --workspace -- --nocapture
 
       - name: Lower sample C to LLVM IR
         run: |
@@ -38,22 +46,11 @@ jobs:
             examples/simple.c \
             -o build/c-flow/simple.ll
 
-      - name: Attempt scalar VLIW lowering
-        id: vliwc
-        continue-on-error: true
+      - name: Lower to VLIW
         run: |
           cargo run -p vliwc -- build/c-flow/simple.ll -o build/c-flow/simple.vliw
 
-      - name: Record expected backend gap
-        if: steps.vliwc.outcome == 'failure'
+      - name: Verify emitted VLIW
         run: |
-          echo "LLVM IR -> VLIW codegen is not implemented yet."
-          echo "The flow is wired; remove continue-on-error when scalar lowering lands."
-
-      - name: Verify emitted VLIW when codegen starts working
-        if: steps.vliwc.outcome == 'success'
-        run: |
-          git clone --depth 1 https://github.com/perplexinglysimple/LwirSimulator.git ../LwirSimulator
-          cargo build --manifest-path ../LwirSimulator/Cargo.toml --bin vliw_verify --bin vliw_simulator
-          ../LwirSimulator/target/debug/vliw_verify build/c-flow/simple.vliw
-          ../LwirSimulator/target/debug/vliw_simulator --trace build/c-flow/simple.vliw
+          "$VLIW_VERIFY_BIN" build/c-flow/simple.vliw
+          "$VLIW_SIMULATOR_BIN" build/c-flow/simple.vliw

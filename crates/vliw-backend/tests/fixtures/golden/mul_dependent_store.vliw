@@ -1,0 +1,106 @@
+.processor {
+  width 4
+
+  hardware {
+    unit alu = integer_alu
+    unit mem = memory
+    unit ctrl = control
+    unit mul = multiplier
+  }
+
+  layout slots {
+    alias I0 = 0
+    alias I1 = 1
+    alias M = 2
+    alias X = 3
+
+    0 = { alu }
+    1 = { alu }
+    2 = { mem }
+    3 = { ctrl, mul }
+  }
+
+  cache { }
+  topology { cpus 1 }
+}
+
+mul_dependent_store:
+entry:
+{
+  I0: movi r2, 3
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : stw [r0 + 0x200], r2
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : ldw r2, [r0 + 0x200]
+  X : nop
+}
+{
+  I0: movi r3, 5
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : stw [r0 + 0x204], r3
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : ldw r3, [r0 + 0x204]
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : mul r3, r2, r3
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : stw [r0 + 0x100], r3
+  X : nop
+}
+{
+  I0: nop
+  I1: nop
+  M : nop
+  X : ret
+}

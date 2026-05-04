@@ -4,6 +4,7 @@ members = [
     "crates/vliw-asm",
     "crates/vliw-backend",
     "crates/vliwc",
+    "tests",
 ]
 
 [workspace.package]
