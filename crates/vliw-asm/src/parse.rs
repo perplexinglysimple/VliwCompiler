@@ -2,7 +2,7 @@
 
 use crate::{
     Bundle, CacheSpec, Item, Operand, Processor, Program, SlotAlias, Syllable, TopologySpec,
-    UnitDecl,
+    UnitDecl, DEFAULT_MEMORY_SIZE,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -85,6 +85,7 @@ impl<'a> Parser<'a> {
         let mut slot_units: Vec<Vec<String>> = Vec::new();
         let cache = CacheSpec {};
         let mut topology = TopologySpec { cpus: 1 };
+        let mut memory_size = DEFAULT_MEMORY_SIZE;
 
         loop {
             self.skip_blank();
@@ -105,12 +106,16 @@ impl<'a> Parser<'a> {
             } else if trimmed.starts_with("topology {") {
                 topology = parse_topology_inline(trimmed)
                     .ok_or_else(|| self.err(format!("bad topology: {trimmed}")))?;
+            } else if trimmed.starts_with("memory {") {
+                // `memory { size N }` — inline
+                memory_size = parse_memory_inline(trimmed)
+                    .ok_or_else(|| self.err(format!("bad memory: {trimmed}")))?;
             } else {
                 return Err(self.err(format!("unexpected in .processor: {trimmed}")));
             }
         }
 
-        Ok(Processor { width, units, slot_aliases, slot_units, cache, topology })
+        Ok(Processor { width, units, slot_aliases, slot_units, cache, topology, memory_size })
     }
 
     fn parse_hardware(&mut self) -> Result<Vec<UnitDecl>, ParseError> {
@@ -234,6 +239,19 @@ fn parse_topology_inline(trimmed: &str) -> Option<TopologySpec> {
     let rest = inner.strip_prefix("cpus ")?.trim();
     let cpus: u32 = rest.parse().ok()?;
     Some(TopologySpec { cpus })
+}
+
+fn parse_memory_inline(trimmed: &str) -> Option<u64> {
+    // `memory { size N }` where N is hex (0xN) or decimal
+    let inner = trimmed
+        .strip_prefix("memory")?
+        .trim()
+        .strip_prefix('{')?
+        .trim_end_matches('}')
+        .trim();
+    let size_s = inner.strip_prefix("size ")?.trim();
+    let size = parse_hex_or_dec(size_s)?;
+    Some(size as u64)
 }
 
 fn parse_syllable(s: &str) -> Option<Syllable> {
@@ -375,6 +393,7 @@ mod tests {
             slot_units: vec![vec!["alu".into()], vec!["mem".into()]],
             cache: CacheSpec {},
             topology: TopologySpec { cpus: 1 },
+            memory_size: DEFAULT_MEMORY_SIZE,
         };
         let p = Program {
             processor: proc,
@@ -426,6 +445,7 @@ mod tests {
             ],
             cache: CacheSpec {},
             topology: TopologySpec { cpus: 2 },
+            memory_size: DEFAULT_MEMORY_SIZE,
         };
         let p = Program {
             processor: proc,

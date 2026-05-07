@@ -3,7 +3,7 @@
 /// Verifies that the same LLVM IR can be compiled for both the canonical 4-slot
 /// layout and a contrived 8-slot layout, that both outputs pass `vliw_verify`,
 /// and that the pack scheduler exploits the wider slot set in the 8-slot case.
-use vliw_asm::{CacheSpec, Item, Processor, SlotAlias, TopologySpec, UnitDecl};
+use vliw_asm::{CacheSpec, Item, Processor, SlotAlias, TopologySpec, UnitDecl, DEFAULT_MEMORY_SIZE};
 use vliw_backend::{compile_for_processor, OptimizationLevel, Schedule};
 
 fn wide_8slot_processor() -> Processor {
@@ -37,6 +37,7 @@ fn wide_8slot_processor() -> Processor {
         ],
         cache: CacheSpec {},
         topology: TopologySpec { cpus: 1 },
+        memory_size: DEFAULT_MEMORY_SIZE,
     }
 }
 

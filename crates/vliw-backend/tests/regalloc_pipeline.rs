@@ -22,7 +22,7 @@ fn fixture_with_40_simultaneously_live_values_spills() {
         .expect("live_40 fixture should compile by spilling excess live values");
 
     assert!(text.contains("ret"));
-    assert!(text.contains("std [r0 + 0x10000]"), "expected spill stores in output");
+    assert!(text.contains("std [r0 + 0xf000]"), "expected spill stores in output");
     assert!(text.contains("ldd "), "expected spill reloads in output");
     assert!(
         !text.contains("r31"),

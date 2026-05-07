@@ -221,7 +221,7 @@ pub fn compile_to_mir(
     check_module(&module)?;
     run_opt_pipeline(&module, opt)?;
 
-    isel::lower_module(&module)
+    isel::lower_module(&module, vliw_asm::DEFAULT_MEMORY_SIZE)
 }
 
 /// Compile LLVM IR text to a `.vliw` program using the canonical 4-slot layout.
@@ -267,10 +267,10 @@ pub fn compile_for_processor(
     check_module(&module)?;
     run_opt_pipeline(&module, opt)?;
 
-    let functions = isel::lower_all_functions(&module)?;
+    let functions = isel::lower_all_functions(&module, processor.memory_size)?;
     let allocated_fns: Vec<_> = functions
         .iter()
-        .map(|f| regalloc::allocate_registers(f))
+        .map(|f| regalloc::allocate_registers(f, processor.memory_size))
         .collect::<Result<_, _>>()?;
 
     match schedule {

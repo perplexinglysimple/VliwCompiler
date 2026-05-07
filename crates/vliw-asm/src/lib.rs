@@ -14,6 +14,9 @@ pub use verify::{verify_bundle, verify_program, HazardError};
 
 use std::fmt::{self, Write};
 
+/// Default simulator memory size (64 KiB).
+pub const DEFAULT_MEMORY_SIZE: u64 = 0x10000;
+
 #[derive(Debug, thiserror::Error)]
 pub enum EmitError {
     #[error("formatting failed: {0}")]
@@ -106,6 +109,9 @@ pub struct Processor {
     pub slot_units: Vec<Vec<String>>,
     pub cache: CacheSpec,
     pub topology: TopologySpec,
+    /// Simulator memory size in bytes. Emitted as `memory { size N }` in the
+    /// processor block when non-default. Defaults to [`DEFAULT_MEMORY_SIZE`].
+    pub memory_size: u64,
 }
 
 impl Default for Processor {
@@ -133,6 +139,7 @@ impl Default for Processor {
             ],
             cache: CacheSpec {},
             topology: TopologySpec { cpus: 1 },
+            memory_size: DEFAULT_MEMORY_SIZE,
         }
     }
 }
@@ -197,6 +204,10 @@ fn emit_header(out: &mut String, p: &Processor) -> fmt::Result {
     }
     writeln!(out, "  }}")?;
     writeln!(out)?;
+    if p.memory_size != DEFAULT_MEMORY_SIZE {
+        writeln!(out)?;
+        writeln!(out, "  memory {{ size {:#x} }}", p.memory_size)?;
+    }
     writeln!(out, "  cache {{ }}")?;
     writeln!(out, "  topology {{ cpus {} }}", p.topology.cpus)?;
     writeln!(out, "}}")
@@ -306,6 +317,7 @@ mod tests {
             slot_units: vec![vec!["alu".into()], vec!["mem".into()]],
             cache: CacheSpec {},
             topology: TopologySpec { cpus: 1 },
+            memory_size: DEFAULT_MEMORY_SIZE,
         };
 
         let program = Program {
@@ -370,6 +382,7 @@ mod tests {
             ],
             cache: CacheSpec {},
             topology: TopologySpec { cpus: 2 },
+            memory_size: DEFAULT_MEMORY_SIZE,
         };
 
         let program = Program {

@@ -51,7 +51,7 @@ use vliw_asm::opcode::Opcode;
 
 use crate::mir::{Block, Function, Reg, Syllable, Terminator, Value};
 use crate::phi::{CopySrc, PhiCopy};
-use crate::regs::{ARG_REG_FIRST, LINK_REG, LINK_REG_SAVE_ADDR, RETVAL_REG};
+use crate::regs::{ARG_REG_FIRST, LINK_REG, RETVAL_REG};
 use crate::CompileError;
 
 /// Raw phi incoming value before the vreg_map is fully populated.
@@ -75,11 +75,15 @@ struct PendingPhi {
 ///
 /// Declarations (no body) are silently skipped.  Returns one [`Function`]
 /// per definition, in module order.
-pub fn lower_all_functions(module: &Module) -> Result<Vec<Function>, CompileError> {
+///
+/// `memory_size` is the processor's declared memory size in bytes; it
+/// determines where the link-register save slot lives (see
+/// [`crate::regs::link_reg_save_addr`]).
+pub fn lower_all_functions(module: &Module, memory_size: u64) -> Result<Vec<Function>, CompileError> {
     module
         .get_functions()
         .filter(|f| f.count_basic_blocks() > 0)
-        .map(|f| lower_function(f))
+        .map(|f| lower_function(f, memory_size))
         .collect()
 }
 
@@ -88,15 +92,15 @@ pub fn lower_all_functions(module: &Module) -> Result<Vec<Function>, CompileErro
 /// Panics if the module contains no function with a body; call
 /// [`crate::check_module`] first to enforce the single-definition
 /// constraint.
-pub fn lower_module(module: &Module) -> Result<Function, CompileError> {
-    lower_all_functions(module)?
+pub fn lower_module(module: &Module, memory_size: u64) -> Result<Function, CompileError> {
+    lower_all_functions(module, memory_size)?
         .into_iter()
         .next()
         .ok_or(CompileError::NotImplemented("no function body to lower"))
 }
 
 /// Lower a single LLVM function value to a MIR [`Function`].
-fn lower_function(llvm_fn: FunctionValue) -> Result<Function, CompileError> {
+fn lower_function(llvm_fn: FunctionValue, memory_size: u64) -> Result<Function, CompileError> {
     let name = llvm_fn.get_name().to_string_lossy().into_owned();
 
     // Pre-assign stable labels to every basic block, keyed by raw pointer so
@@ -300,7 +304,7 @@ fn lower_function(llvm_fn: FunctionValue) -> Result<Function, CompileError> {
                         opcode: Opcode::StoreD,
                         dst: None,
                         srcs: vec![
-                            Value::Imm(LINK_REG_SAVE_ADDR),
+                            Value::Imm(crate::regs::link_reg_save_addr(memory_size)),
                             Value::Reg(Reg::PReg(LINK_REG)),
                         ],
                     });
@@ -326,7 +330,7 @@ fn lower_function(llvm_fn: FunctionValue) -> Result<Function, CompileError> {
                     syllables.push(Syllable {
                         opcode: Opcode::LoadD,
                         dst: Some(Reg::PReg(LINK_REG)),
-                        srcs: vec![Value::Imm(LINK_REG_SAVE_ADDR)],
+                        srcs: vec![Value::Imm(crate::regs::link_reg_save_addr(memory_size))],
                     });
 
                     // Capture return value (if non-void) from RETVAL_REG into a new vreg.

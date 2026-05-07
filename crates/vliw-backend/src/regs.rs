@@ -21,9 +21,20 @@ pub const ARG_REG_LAST: u8 = 9;
 /// Number of integer argument registers.
 pub const ARG_REG_COUNT: u8 = ARG_REG_LAST - ARG_REG_FIRST + 1;
 
-/// Stack address reserved for saving/restoring the link register across calls.
-/// Sits just below the spill area (0x10_000) so it does not overlap spill slots.
-pub const LINK_REG_SAVE_ADDR: i64 = 0x0_FFF8;
+/// Base address of the register spill area for the given memory size.
+///
+/// Uses the top 1/16th of memory: `memory_size * 15 / 16`.
+/// For the default 64 KiB memory this is `0xF000`.
+pub fn spill_base(memory_size: u64) -> i64 {
+    memory_size as i64 * 15 / 16
+}
+
+/// Address reserved for saving/restoring the link register across calls.
+///
+/// Placed at [`spill_base`]`(memory_size) - 8`, just below the spill area.
+pub fn link_reg_save_addr(memory_size: u64) -> i64 {
+    spill_base(memory_size) - 8
+}
 
 /// First general-purpose register available for virtual-register allocation.
 pub const FIRST_ALLOCATABLE_GPR: u8 = RETVAL_REG + 1;

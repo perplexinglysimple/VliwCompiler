@@ -13,18 +13,20 @@ use crate::mir::{Block, Function, Reg, Syllable, Terminator, Value};
 use crate::{regs, CompileError};
 use vliw_asm::opcode::Opcode;
 
-const SPILL_BASE: i64 = 0x10_000;
 const SPILL_SLOT_BYTES: i64 = 8;
 
 /// Rewrite all [`Reg::VReg`] operands in `func` to [`Reg::PReg`] operands.
-pub fn allocate_registers(func: &Function) -> Result<Function, CompileError> {
+///
+/// `memory_size` is the processor's declared memory size in bytes; it controls
+/// where the spill area begins (see [`crate::regs::spill_base`]).
+pub fn allocate_registers(func: &Function, memory_size: u64) -> Result<Function, CompileError> {
     let last_uses = compute_block_last_uses(func);
     let live_out = Liveness::compute(func)
         .blocks
         .into_iter()
         .map(|block| block.live_out)
         .collect();
-    let mut alloc = Allocator::new(last_uses, live_out);
+    let mut alloc = Allocator::new(last_uses, live_out, regs::spill_base(memory_size));
 
     let mut blocks = Vec::with_capacity(func.blocks.len());
     let mut pos = 0usize;
@@ -90,10 +92,11 @@ struct Allocator {
     free: VecDeque<u8>,
     spill_slots: HashMap<u32, i64>,
     next_spill_slot: i64,
+    spill_base: i64,
 }
 
 impl Allocator {
-    fn new(last_uses: Vec<HashMap<u32, usize>>, live_out: Vec<LiveSet>) -> Self {
+    fn new(last_uses: Vec<HashMap<u32, usize>>, live_out: Vec<LiveSet>, spill_base: i64) -> Self {
         Self {
             last_uses,
             live_out,
@@ -101,6 +104,7 @@ impl Allocator {
             free: (regs::FIRST_ALLOCATABLE_GPR..=regs::LAST_ALLOCATABLE_GPR).collect(),
             spill_slots: HashMap::new(),
             next_spill_slot: 0,
+            spill_base,
         }
     }
 
@@ -268,7 +272,7 @@ impl Allocator {
 
     fn spill_slot(&mut self, vreg: u32) -> i64 {
         *self.spill_slots.entry(vreg).or_insert_with(|| {
-            let slot = SPILL_BASE + self.next_spill_slot * SPILL_SLOT_BYTES;
+            let slot = self.spill_base + self.next_spill_slot * SPILL_SLOT_BYTES;
             self.next_spill_slot += 1;
             slot
         })
@@ -341,7 +345,7 @@ mod tests {
             }],
         };
 
-        let allocated = allocate_registers(&func).expect("allocation should succeed");
+        let allocated = allocate_registers(&func, vliw_asm::DEFAULT_MEMORY_SIZE).expect("allocation should succeed");
         let block = &allocated.blocks[0];
 
         assert_eq!(block.syllables[0].dst, Some(Reg::PReg(2)));
@@ -377,7 +381,7 @@ mod tests {
             }],
         };
 
-        let allocated = allocate_registers(&func).expect("allocation should succeed");
+        let allocated = allocate_registers(&func, vliw_asm::DEFAULT_MEMORY_SIZE).expect("allocation should succeed");
 
         assert_eq!(allocated.blocks[0].syllables[2].dst, Some(Reg::PReg(3)));
     }
@@ -420,7 +424,7 @@ mod tests {
             ],
         };
 
-        let allocated = allocate_registers(&func).expect("allocation should succeed");
+        let allocated = allocate_registers(&func, vliw_asm::DEFAULT_MEMORY_SIZE).expect("allocation should succeed");
 
         assert_eq!(allocated.blocks[0].syllables[0].dst, Some(Reg::PReg(2)));
         assert_eq!(
@@ -468,7 +472,7 @@ mod tests {
             }],
         };
 
-        let allocated = allocate_registers(&func).expect("allocation should spill");
+        let allocated = allocate_registers(&func, vliw_asm::DEFAULT_MEMORY_SIZE).expect("allocation should spill");
         let spill_stores = allocated.blocks[0]
             .syllables
             .iter()
