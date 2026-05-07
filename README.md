@@ -1,7 +1,7 @@
 # VliwCompiler
 
 Rust-based compiler for the VLIW ISA defined by
-[LwirSimulator](https://github.com/perplexinglysimple/LwirSimulator). Consumes
+[VliwSimulator](https://github.com/perplexinglysimple/VliwSimulator). Consumes
 LLVM IR (via `inkwell`), runs LLVM's optimization pipeline, then lowers to
 scheduled `.vliw` assembly that satisfies the simulator's compiler contract.
 
@@ -33,9 +33,9 @@ keeps the bundler under direct control.
 ## Target contract
 
 Backend output must satisfy
-[`docs/compiler_contract.md`](https://github.com/perplexinglysimple/LwirSimulator/blob/master/docs/compiler_contract.md).
+[`docs/compiler_contract.md`](https://github.com/perplexinglysimple/VliwSimulator/blob/master/docs/compiler_contract.md).
 Output text format:
-[`docs/vliw_asm_format.md`](https://github.com/perplexinglysimple/LwirSimulator/blob/master/docs/vliw_asm_format.md).
+[`docs/vliw_asm_format.md`](https://github.com/perplexinglysimple/VliwSimulator/blob/master/docs/vliw_asm_format.md).
 
 The staged bring-up plan is in [`docs/dev_plan.md`](docs/dev_plan.md).
 
@@ -82,14 +82,14 @@ cargo run -p vliwc -- --help
 ## Current Simulator Smoke Test
 
 The asm emitter targets the format parsed by
-[LwirSimulator](https://github.com/perplexinglysimple/LwirSimulator). To verify
+[VliwSimulator](https://github.com/perplexinglysimple/VliwSimulator). To verify
 the hard-coded demo program, build the simulator's verifier alongside this repo:
 
 ```bash
 mkdir -p build
 cargo run -p vliwc -- --emit=demo -o build/demo.vliw
-../LwirSimulator/target/debug/vliw_verify build/demo.vliw
-../LwirSimulator/target/debug/vliw_simulator --trace build/demo.vliw
+../VliwSimulator/target/debug/vliw_verify build/demo.vliw
+../VliwSimulator/target/debug/vliw_simulator --trace build/demo.vliw
 ```
 
 ## C Flow
@@ -108,14 +108,32 @@ clang-19 -S -emit-llvm -O1 -ffreestanding -fno-builtin \
 
 cargo run -p vliwc -- build/c-flow/simple.ll -o build/c-flow/simple.vliw
 
-../LwirSimulator/target/debug/vliw_verify build/c-flow/simple.vliw
-../LwirSimulator/target/debug/vliw_simulator --trace build/c-flow/simple.vliw
+../VliwSimulator/target/debug/vliw_verify build/c-flow/simple.vliw
+../VliwSimulator/target/debug/vliw_simulator --trace build/c-flow/simple.vliw
 ```
 
 Use `--schedule=pack` to enable local scheduling plus greedy bundle packing:
 
 ```bash
 cargo run -p vliwc -- --schedule=pack build/c-flow/simple.ll -o build/c-flow/simple.pack.vliw
+```
+
+The CI C-flow job also compiles several less trivial examples that stay inside
+the supported LLVM subset:
+
+- [`examples/weighted_loop.c`](examples/weighted_loop.c): loop phis, multiply
+  latency, shifts, xor, conditional branches, and multiple volatile stores.
+- [`examples/branch_memory.c`](examples/branch_memory.c): nested branches,
+  loop-carried state, memory side effects, and mixed arithmetic.
+- [`examples/function_calls.c`](examples/function_calls.c): direct no-inline
+  helper calls, argument passing, return values, and link-register handling.
+
+```bash
+clang-19 -S -emit-llvm -O1 -ffreestanding -fno-builtin \
+  examples/weighted_loop.c \
+  -o build/c-flow/weighted_loop.ll
+
+cargo run -p vliwc -- build/c-flow/weighted_loop.ll -o build/c-flow/weighted_loop.vliw
 ```
 
 ## Processor Layouts

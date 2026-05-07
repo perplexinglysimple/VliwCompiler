@@ -8,6 +8,9 @@ on:
 jobs:
   c-to-vliw-flow:
     runs-on: ubuntu-24.04
+    env:
+      SIMULATOR_TOOLS_REPO: perplexinglysimple/VliwSimulator
+      SIMULATOR_TOOLS_TAG: v0.1.0
 
     steps:
       - name: Check out compiler
@@ -16,7 +19,7 @@ jobs:
       - name: Install LLVM 19 toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-19 llvm-19-dev
+          sudo apt-get install -y clang-19 llvm-19-dev unzip zstd
 
       - name: Export LLVM 19 toolchain
         run: |
@@ -25,13 +28,59 @@ jobs:
           echo "LLVM_CONFIG_PATH=/usr/lib/llvm-19/bin/llvm-config" >> "$GITHUB_ENV"
           /usr/lib/llvm-19/bin/llvm-config --version
 
-      - name: Clone and build LwirSimulator
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Download simulator release tools
         run: |
-          git clone --depth 1 https://github.com/perplexinglysimple/LwirSimulator.git ../LwirSimulator
-          cargo build --manifest-path ../LwirSimulator/Cargo.toml --bin vliw_verify --bin vliw_simulator
-          SIM_DIR="$(realpath ../LwirSimulator)"
-          echo "VLIW_VERIFY_BIN=${SIM_DIR}/target/debug/vliw_verify" >> "$GITHUB_ENV"
-          echo "VLIW_SIMULATOR_BIN=${SIM_DIR}/target/debug/vliw_simulator" >> "$GITHUB_ENV"
+          mkdir -p build/simulator-tools
+          release_json="$(mktemp)"
+          curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${SIMULATOR_TOOLS_REPO}/releases/tags/${SIMULATOR_TOOLS_TAG}" \
+            -o "$release_json"
+
+          asset_url="$(
+            python3 - "$release_json" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          assets = data.get("assets", [])
+          if not assets:
+              raise SystemExit("latest simulator release has no assets")
+
+          for asset in assets:
+              name = asset["name"].lower()
+              if "linux-x86_64" in name or ("linux" in name and "x86_64" in name):
+                  print(asset["browser_download_url"])
+                  break
+          else:
+              raise SystemExit("latest simulator release has no linux-x86_64 asset")
+          PY
+          )"
+
+          asset="build/simulator-tools/$(basename "$asset_url")"
+          curl -fsSL "$asset_url" -o "$asset"
+          case "$asset" in
+            *.tar.gz|*.tgz) tar -xzf "$asset" -C build/simulator-tools ;;
+            *.tar.xz) tar -xJf "$asset" -C build/simulator-tools ;;
+            *.tar.zst) tar --zstd -xf "$asset" -C build/simulator-tools ;;
+            *.zip) unzip -q "$asset" -d build/simulator-tools ;;
+            *) chmod +x "$asset" ;;
+          esac
+
+          verify_bin="$(find build/simulator-tools -type f -name vliw_verify -perm /111 | head -n1)"
+          simulator_bin="$(find build/simulator-tools -type f -name vliw_simulator -perm /111 | head -n1)"
+          if [ -z "$verify_bin" ] || [ -z "$simulator_bin" ]; then
+            chmod +x $(find build/simulator-tools -type f \( -name vliw_verify -o -name vliw_simulator \))
+            verify_bin="$(find build/simulator-tools -type f -name vliw_verify | head -n1)"
+            simulator_bin="$(find build/simulator-tools -type f -name vliw_simulator | head -n1)"
+          fi
+          test -n "$verify_bin"
+          test -n "$simulator_bin"
+          echo "VLIW_VERIFY_BIN=$(realpath "$verify_bin")" >> "$GITHUB_ENV"
+          echo "VLIW_SIMULATOR_BIN=$(realpath "$simulator_bin")" >> "$GITHUB_ENV"
 
       - name: Build Rust workspace
         run: cargo build --workspace
@@ -39,18 +88,26 @@ jobs:
       - name: Test Rust workspace
         run: cargo test --workspace -- --nocapture
 
-      - name: Lower sample C to LLVM IR
+      - name: Lower C examples to LLVM IR
         run: |
           mkdir -p build/c-flow
-          clang-19 -S -emit-llvm -O1 -ffreestanding -fno-builtin \
-            examples/simple.c \
-            -o build/c-flow/simple.ll
+          for example in simple weighted_loop branch_memory function_calls; do
+            clang-19 -S -emit-llvm -O1 -ffreestanding -fno-builtin \
+              "examples/${example}.c" \
+              -o "build/c-flow/${example}.ll"
+          done
 
-      - name: Lower to VLIW
+      - name: Lower C examples to VLIW
         run: |
-          cargo run -p vliwc -- build/c-flow/simple.ll -o build/c-flow/simple.vliw
+          for example in simple weighted_loop branch_memory function_calls; do
+            cargo run -p vliwc -- \
+              "build/c-flow/${example}.ll" \
+              -o "build/c-flow/${example}.vliw"
+          done
 
-      - name: Verify emitted VLIW
+      - name: Verify emitted VLIW examples
         run: |
-          "$VLIW_VERIFY_BIN" build/c-flow/simple.vliw
-          "$VLIW_SIMULATOR_BIN" build/c-flow/simple.vliw
+          for example in simple weighted_loop branch_memory function_calls; do
+            "$VLIW_VERIFY_BIN" "build/c-flow/${example}.vliw"
+            "$VLIW_SIMULATOR_BIN" "build/c-flow/${example}.vliw"
+          done

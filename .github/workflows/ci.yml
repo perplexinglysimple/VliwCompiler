@@ -8,6 +8,9 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
+    env:
+      SIMULATOR_TOOLS_REPO: perplexinglysimple/VliwSimulator
+      SIMULATOR_TOOLS_TAG: v0.1.0
 
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +20,7 @@ jobs:
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
           echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main" | sudo tee /etc/apt/sources.list.d/llvm-19.list
           sudo apt-get update -q
-          sudo apt-get install -y llvm-19-dev libpolly-19-dev
+          sudo apt-get install -y llvm-19-dev libpolly-19-dev unzip zstd
 
       - name: Set LLVM paths
         run: |
@@ -26,8 +29,6 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "1.75"
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
@@ -43,13 +44,56 @@ jobs:
       - name: Build
         run: cargo build --workspace
 
-      - name: Clone and build simulator tools
+      - name: Download simulator release tools
         run: |
-          git clone --depth 1 https://github.com/perplexinglysimple/LwirSimulator.git ../LwirSimulator
-          cargo build --manifest-path ../LwirSimulator/Cargo.toml --bin vliw_verify --bin vliw_simulator
-          SIM_DIR="$(realpath ../LwirSimulator)"
-          echo "VLIW_VERIFY_BIN=${SIM_DIR}/target/debug/vliw_verify" >> "$GITHUB_ENV"
-          echo "VLIW_SIMULATOR_BIN=${SIM_DIR}/target/debug/vliw_simulator" >> "$GITHUB_ENV"
+          mkdir -p build/simulator-tools
+          release_json="$(mktemp)"
+          curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${SIMULATOR_TOOLS_REPO}/releases/tags/${SIMULATOR_TOOLS_TAG}" \
+            -o "$release_json"
+
+          asset_url="$(
+            python3 - "$release_json" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          assets = data.get("assets", [])
+          if not assets:
+              raise SystemExit("latest simulator release has no assets")
+
+          for asset in assets:
+              name = asset["name"].lower()
+              if "linux-x86_64" in name or ("linux" in name and "x86_64" in name):
+                  print(asset["browser_download_url"])
+                  break
+          else:
+              raise SystemExit("latest simulator release has no linux-x86_64 asset")
+          PY
+          )"
+
+          asset="build/simulator-tools/$(basename "$asset_url")"
+          curl -fsSL "$asset_url" -o "$asset"
+          case "$asset" in
+            *.tar.gz|*.tgz) tar -xzf "$asset" -C build/simulator-tools ;;
+            *.tar.xz) tar -xJf "$asset" -C build/simulator-tools ;;
+            *.tar.zst) tar --zstd -xf "$asset" -C build/simulator-tools ;;
+            *.zip) unzip -q "$asset" -d build/simulator-tools ;;
+            *) chmod +x "$asset" ;;
+          esac
+
+          verify_bin="$(find build/simulator-tools -type f -name vliw_verify -perm /111 | head -n1)"
+          simulator_bin="$(find build/simulator-tools -type f -name vliw_simulator -perm /111 | head -n1)"
+          if [ -z "$verify_bin" ] || [ -z "$simulator_bin" ]; then
+            chmod +x $(find build/simulator-tools -type f \( -name vliw_verify -o -name vliw_simulator \))
+            verify_bin="$(find build/simulator-tools -type f -name vliw_verify | head -n1)"
+            simulator_bin="$(find build/simulator-tools -type f -name vliw_simulator | head -n1)"
+          fi
+          test -n "$verify_bin"
+          test -n "$simulator_bin"
+          echo "VLIW_VERIFY_BIN=$(realpath "$verify_bin")" >> "$GITHUB_ENV"
+          echo "VLIW_SIMULATOR_BIN=$(realpath "$simulator_bin")" >> "$GITHUB_ENV"
 
       - name: Test
         run: cargo test --workspace -- --nocapture
